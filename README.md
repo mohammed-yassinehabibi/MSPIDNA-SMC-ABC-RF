@@ -1,6 +1,8 @@
 # MSPIDNA-ABC-SMC-RF : Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference
 
 ## Run [specific_experiment](specific_experiment.py) to run the overall process
+
+### Advices before running the code
 ```bash
 # Create a virtual environment 
 python -m venv myenv
@@ -16,6 +18,7 @@ pip install -r requirements.txt
 #NB : the library torch may need to be installed separately depending on your system and if you're using CPU/GPU
 ```
 
+## Presentation of the repository
 This repository gives an implementation of a process made to infer parameters of a stochastic finite sites model whose output data are DNA sequences sampled in a population with a known common ancestor. The process is motivated and explained in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf).
 
 The data will be generated using the library [msprime](https://tskit.dev/msprime/docs/latest/intro.html), the code for simulating data is in [SMC_DRF](SMC_DRF.py), in the DataSimulator class.
