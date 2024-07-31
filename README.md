@@ -17,8 +17,11 @@ source myenv/bin/activate
 pip install -r requirements.txt
 #NB : the library torch may need to be installed separately depending on your system and if you're using CPU/GPU
 ```
+## How to test the inference method quickly
 
-## Presentation of the repository
+In  the [results_analysis](results_analysis.ipynb) notebook, we give a function that can be used to run new inference experiments with already trained MSPIDNA networks. We also give an implementation of an idea developed in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf) to assess the efficiency of the implemented method as well as functions to plot the results of the inference (AD & 2D posteriors). We also provide an implementation of SMC-ABC-RF functions.
+
+## Overall presentation of the repository
 This repository gives an implementation of a process made to infer parameters of a stochastic finite sites model whose output data are DNA sequences sampled in a population with a known common ancestor. The process is motivated and explained in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf).
 
 The data will be generated using the library [msprime](https://tskit.dev/msprime/docs/latest/intro.html), the code for simulating data is in [SMC_DRF](SMC_DRF.py), in the DataSimulator class.
@@ -30,7 +33,7 @@ The prossess consists in two parts :
   
 The overall process is implemented in [MSPIDNA_SMC_ABC_RF](MSPIDNA_SMC_ABC_RF.py), it enables to gain insights into the evolutionary processes that have shaped the DNA sequences and make inferences about the underlying genetic mechanisms. An example of a specific experiment taking a prior on the parameters, training a MSPIDNA neural network to generate summary-statistics and trying to infer the parameters of a specific (simulated or real) data using SMC-ABC-RF is provided in [specific_experiment](specific_experiment.py).
 
-Finally, in [results_analysis](results_analysis.ipynb), we provide some functions and ideas to state the efficiency of the implemented method. We also provide an implementation of SMC-ABC-RF functions.
+
 
 
 
