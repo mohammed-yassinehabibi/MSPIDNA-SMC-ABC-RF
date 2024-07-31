@@ -29,11 +29,9 @@ class Experiment:
     '''
     def __init__(self, nb_samples_mspidna_training=5000, nb_samples_abc_step=5000, sample_size=100, population_size=1000, 
                  sequence_length=4000, len_seq_final=4000, 
-                 mr_min=1e-7, mr_max=1e-5, root_distribution=[0.25,0.25,0.25,0.25], 
+                 mr_min=1e-7, mr_max=1e-5, root_distribution=[0.25,0.25,0.25,0.25], null_diag=True,
                  full_seq=False, nb_iter=1, idx_start=0, idx_end=0, nb_iter_start=1, 
                  nb_iter_end=5, real=False, model_custom_exp_name=None, custom_exp_name=None, mspidna_training=True):
-        self.custom_exp_name = custom_exp_name if custom_exp_name is not None else ''
-        self.model_custom_exp_name = model_custom_exp_name if model_custom_exp_name is not None else ''
         self.nb_samples_mspidna_training = nb_samples_mspidna_training
         self.nb_samples_abc_step = nb_samples_abc_step
         self.sample_size = sample_size
@@ -42,16 +40,25 @@ class Experiment:
         self.len_seq_final = len_seq_final
         self.path_full_seq = 'full_seq_' if full_seq else ""
         self.path_real = 'real_' if real else ""
-        self.data_folder = self.path_full_seq + self.path_real + "data/"
+        self.path_null_diag = 'null_diag_' if null_diag else ""
+        self.custom_exp_name = custom_exp_name if custom_exp_name is not None else ''
+        self.model_custom_exp_name = model_custom_exp_name if model_custom_exp_name is not None else ''
+        self.model_custom_exp_name = self.path_full_seq + self.path_null_diag + self.model_custom_exp_name
+        self.experiment_name = f"{self.path_real}{self.custom_exp_name}{self.model_custom_exp_name}"
+        os.makedirs(os.path.dirname(f'Experiments_data/{self.experiment_name}/'), exist_ok=True)
+        self.data_folder = f"Experiments_data/{self.experiment_name}/data/"
         os.makedirs(os.path.dirname(self.data_folder), exist_ok=True)
-        self.results_folder = self.path_full_seq + self.path_real + "results/"
+        self.results_folder = f"Experiments_data/{self.experiment_name}/results/"
         os.makedirs(os.path.dirname(self.results_folder), exist_ok=True)
-        self.DRF_folder = self.path_full_seq + self.path_real + 'DRF_exploitation_of_SPIDNA_results/'
-        os.makedirs(os.path.dirname(self.DRF_folder), exist_ok=True)
-        self.points_to_infere_path = self.path_full_seq + self.path_real + f'results/parameters_and_SS_0_prior_1_goals{custom_exp_name}{model_custom_exp_name}.pt'
+        self.models_folder = 'Trained_MSPIDNAs/'
+        self.model_folder = f"{self.models_folder}{self.model_custom_exp_name}/"
+        os.makedirs(os.path.dirname(self.models_folder), exist_ok=True)
+        os.makedirs(os.path.dirname(self.model_folder), exist_ok=True)
+        self.points_to_infere_path = f'Experiments_data/{self.experiment_name}/results/parameters_and_SS_0_prior_1_goals.pt'
         self.mr_min = mr_min
         self.mr_max = mr_max
         self.root_distribution = root_distribution
+        self.null_diag = null_diag
         self.full_seq = full_seq
         self.nb_iter = nb_iter
         self.idx_start = idx_start
@@ -59,11 +66,10 @@ class Experiment:
         self.nb_iter_start = nb_iter_start
         self.nb_iter_end = nb_iter_end
         self.real = real
-        self.perturbation = 'adaptative'
         self.mspidna_training = mspidna_training
 
     def run(self):
-        print(f"Running the experiment {self.custom_exp_name} {self.model_custom_exp_name} {self.path_full_seq + self.path_real}")
+        print(f"Running the experiment {self.path_real}{self.custom_exp_name}{self.model_custom_exp_name}")
         if self.nb_iter_start == 1 and self.mspidna_training:
             self.generate_dataset()
             self.train_model()
@@ -80,39 +86,35 @@ class Experiment:
     def generate_dataset(self, goal=False):
         ds = DataSimulator(nb_samples=self.nb_samples_mspidna_training if not goal else (self.idx_end - self.idx_start + 1), sample_size=self.sample_size, 
                            population_size=self.population_size, sequence_length=self.sequence_length, 
-                           len_seq_final=self.len_seq_final, mr_min=self.mr_min, 
-                           mr_max=self.mr_max, root_distribution=self.root_distribution, 
-                           full_seq=self.full_seq, real=self.real, custom_exp_name=self.custom_exp_name,
-                           model_custom_exp_name=self.model_custom_exp_name, goal=goal)
+                           len_seq_final=self.len_seq_final, mr_min=self.mr_min, mr_max=self.mr_max, 
+                           root_distribution=self.root_distribution, null_diag=self.null_diag, data_folder=self.data_folder,
+                           full_seq=self.full_seq, real=self.real, goal=goal)
         ds.simulate_and_save(self.nb_iter, idx=0)
     #2. Train the model MSPIDNA
     def train_model(self):
         simulation = MSPIDNASimulation(idx=0, nb_iter=1, data_folder = self.data_folder, 
                                       results_folder = self.results_folder, device=None, 
-                                      dataset_name=f"dataset_0_prior_1_adaptative{self.custom_exp_name}{self.model_custom_exp_name}.pt",
-                                      custom_exp_name=self.custom_exp_name, model_custom_exp_name=self.model_custom_exp_name)
+                                      dataset_name=f"dataset_0_prior_1.pt",
+                                      model_folder=self.model_folder)
         simulation.run()
     #3. Generate goals summary statistics with MSPIDNA for the points to infer
     def generate_goals_summary_statistics(self):
         #Generate the summary statistics for all our goal points in one time
         gss = GenerateSummaryStatistics(self.nb_iter, idx = 0, data_folder = self.data_folder, 
-                                results_folder = self.results_folder, goal=True, 
-                                perturbation=self.perturbation, custom_exp_name=self.custom_exp_name, 
-                                model_custom_exp_name=self.model_custom_exp_name)
+                                results_folder = self.results_folder, goal=True, model_folder=self.model_folder)
         gss.run()
     #4. Run the ABC-SMC-RF process to infer the parameters
     def complete_abc_smc_rf(self, plot_1D=True, plot_2D=False):
         for nb_iter in range(self.nb_iter_start, self.nb_iter_end + 1):
             run_abc_smc_rf(nb_samples =self.nb_samples_abc_step, nb_iter=nb_iter, idx_start = self.idx_start, idx_end = self.idx_end, real = self.real, 
-                            full_sequence = self.full_seq, plot_1D = plot_1D, plot_2D = plot_2D, root_distribution=self.root_distribution,
-                            mr_min=self.mr_min, mr_max=self.mr_max, data_folder=self.data_folder, results_folder=self.results_folder, 
-                            DRF_folder=self.DRF_folder, points_to_infere_path=self.points_to_infere_path, perturbation=self.perturbation,
-                            custom_exp_name=self.custom_exp_name, model_custom_exp_name=self.model_custom_exp_name)
+                            full_sequence = self.full_seq, plot_1D = plot_1D, plot_2D = plot_2D, root_distribution=self.root_distribution, null_diag=self.null_diag,
+                            mr_min=self.mr_min, mr_max=self.mr_max, data_folder=self.data_folder, model_folder=self.model_folder, 
+                            results_folder=self.results_folder, points_to_infere_path=self.points_to_infere_path)
 
 
 if __name__ == '__main__':
-    exp = Experiment(nb_samples=5000, sample_size=100, population_size=1000, sequence_length=4000, 
-                     len_seq_final=4000, mr_min=1e-7, mr_max=1e-5, root_distribution=[0.31,0.25,0.31,0.13], 
-                     full_seq=False, nb_iter=1, idx_start=0, idx_end=0, nb_iter_start=1, nb_iter_end=5, real=True, 
-                     perturbation='adaptative', custom_exp_name=None)
+    exp = Experiment(nb_samples_mspidna_training=5000, nb_samples_abc_step=5000, sample_size=100, population_size=1000, sequence_length=4000, 
+                 len_seq_final=4000, mr_min=1e-7, mr_max=1e-5, root_distribution=[0.25,0.25,0.25,0.25], null_diag=True,
+                 full_seq=False, nb_iter=1, idx_start=0, idx_end=0, nb_iter_start=1, nb_iter_end=5, real=False, 
+                 model_custom_exp_name="low_mr", custom_exp_name="", mspidna_training=True)
     exp.run()

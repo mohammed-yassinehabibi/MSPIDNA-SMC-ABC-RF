@@ -12,32 +12,31 @@ from torch.utils.data import TensorDataset, Subset, DataLoader
 
 
 class MSPIDNASimulation:
-    def __init__(self, idx=0, nb_iter=1, data_folder = "full_seq_real_data/", 
-                 results_folder = "full_seq_real_results/", device=None, dataset_name=f"dataset_0_prior_1_adaptative.pt", 
-                 custom_exp_name=None, model_custom_exp_name=None):
-        self.model_custom_exp_name = model_custom_exp_name if model_custom_exp_name is not None else ''
-        self.custom_exp_name = custom_exp_name if custom_exp_name is not None else ''
+    def __init__(self, idx=0, nb_iter=1, data_folder = None, 
+                 results_folder = None, device=None, dataset_name=f"dataset_0_prior_1_adaptative.pt", 
+                 model_folder=None):
+        self.model_folder = model_folder if model_folder is not None else ''
         self.device = device if device else 'cuda' if torch.cuda.is_available() else 'cpu'
         self.load_model = False
         self.parallelize = True
         self.training = True
         self.last_model = False
-        self.perturbation = "adaptative"
         self.data_folder = data_folder
         self.results_folder = results_folder
         self.idx = idx
         self.nb_iter = nb_iter
         self.dataset_name = dataset_name
+        self.dataset = self.load_and_normalize_dataset()
+        self.num_output = self.dataset[0][1].shape[0]
         self.params_model = {
             'load_model': self.load_model,
-            'model_path': self.results_folder + f'trained_model{self.model_custom_exp_name}.pth',
-            'num_output': 13,
+            'model_path': self.model_folder + f'trained_model.pth',
+            'num_output': self.num_output,
             'num_block': 1,
-            'num_feature': 16,
+            'num_feature': self.num_output+3,
             'nb_classes': 16,
             'device': self.device
         }
-        self.dataset = self.load_and_normalize_dataset()
         self.model_to_test = self.choose_model()
         self.params_training = {
             'model': self.model_to_test,
@@ -48,8 +47,8 @@ class MSPIDNASimulation:
             'num_epochs': 5,
             'batch_size': 16,
             'save': True,
-            'best_loss_path': self.results_folder + f'best_loss{self.model_custom_exp_name}.pth',
-            'best_model_path': self.results_folder + f'trained_model{self.model_custom_exp_name}.pth',
+            'best_loss_path': self.model_folder + f'best_loss.pth',
+            'best_model_path': self.model_folder + f'trained_model.pth',
             'last_model': self.last_model
         }
         self.params_eval = {
@@ -57,10 +56,16 @@ class MSPIDNASimulation:
             'dataset': self.dataset,
             'device': self.device,
             'to_predict': [
-                'mutation_rate', 'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG',
+                'mutation_rate', 
+                'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG',
                 'transition_matrix_TA', 'transition_matrix_TC', 'transition_matrix_TG',
                 'transition_matrix_CA', 'transition_matrix_CT', 'transition_matrix_CG',
                 'transition_matrix_GA', 'transition_matrix_GT', 'transition_matrix_GC'
+            ] if self.num_output==13 else ['mutation_rate', 
+                                           'transition_matrix_AA', 'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG',
+                                            'transition_matrix_TA', 'transition_matrix_TT', 'transition_matrix_TC', 'transition_matrix_TG',
+                                            'transition_matrix_CA', 'transition_matrix_CT', 'transition_matrix_CC', 'transition_matrix_CG',
+                                            'transition_matrix_GA', 'transition_matrix_GT', 'transition_matrix_GC', 'transition_matrix_GG'
             ]
         }
 
@@ -75,8 +80,8 @@ class MSPIDNASimulation:
         y_train = y[:len_train]
         y_train_mean = y_train.mean(axis=0)
         y_train_std = y_train.std(axis=0)
-        torch.save(y_train_mean, self.data_folder + f'y_train_mean{self.model_custom_exp_name}.pt')
-        torch.save(y_train_std, self.data_folder + f'y_train_std{self.model_custom_exp_name}.pt')
+        torch.save(y_train_mean, self.model_folder + f'y_train_mean.pt')
+        torch.save(y_train_std, self.model_folder + f'y_train_std.pt')
         y_norm = (y - y_train_mean) / y_train_std
         print("Create new normalised dataset...")
         dataset2 = TensorDataset(dataset[:][0], y_norm)
@@ -118,13 +123,12 @@ class MSPIDNASimulation:
             os.makedirs(os.path.dirname(self.results_folder), exist_ok=True)
             self.train_model()
         predictions = self.eval_model()
-        y_train_mean = torch.load(self.data_folder + f'y_train_mean{self.model_custom_exp_name}.pt', weights_only=False)
-        y_train_std = torch.load(self.data_folder + f'y_train_std{self.model_custom_exp_name}.pt', weights_only=False)
+        y_train_mean = torch.load(self.model_folder + f'y_train_mean.pt', weights_only=False)
+        y_train_std = torch.load(self.model_folder + f'y_train_std.pt', weights_only=False)
         norm_predictions = predictions * y_train_std.to('cpu').repeat(1, 2).numpy() + y_train_mean.to('cpu').repeat(1, 2).numpy()
-        torch.save(norm_predictions, self.results_folder + f'parameters_and_SS_{self.idx}_prior_1{self.custom_exp_name}{self.model_custom_exp_name}.pt')
         print(f"CPU utilization: {psutil.cpu_percent()}%")
         print(f"Memory utilization: {psutil.virtual_memory().percent}%")
-        print('mse : ', mse(predictions))
+        print('mse : ', mse(norm_predictions))
 
 class MSPIDNABlock(nn.Module):
     def __init__(self, num_output, num_feature):
@@ -133,14 +137,12 @@ class MSPIDNABlock(nn.Module):
         self.phi = nn.Conv2d(num_feature * 2, num_feature*2, (1, 3))
         self.phi_bn = nn.BatchNorm2d(num_feature * 2)
         self.maxpool = nn.MaxPool2d((1, 2))
-        #self.fc = nn.Linear(num_output, num_output)
         self.fc = nn.Linear(num_feature*2, num_output)
         
     def forward(self, x, output):
         x = self.phi(self.phi_bn(x))
         psi1 = torch.mean(x, 2, keepdim=True)
         psi = psi1
-        #current_output = self.fc(torch.mean(psi[:, :self.num_output, :, :], 3).squeeze(2))
         current_output = self.fc(torch.mean(psi[:, :, :, :], 3).squeeze(2))
         output = output + current_output
         psi = psi.expand(-1, -1, x.size(2), -1)
@@ -235,29 +237,32 @@ class GenerateSummaryStatistics:
     - data_folder: folder containing the data points
     - results_folder: folder to save the summary statistics
     - goal: boolean to generate summary statistics for the points to infer
-    - perturbation: perturbation used for the data points
-    - custom_exp_name: custom experiment name
-    - model_custom_exp_name: prior-specific name for the experiment
+    - model_folder: folder containing the trained MSPIDNA
     '''
-    def __init__(self,nb_iter, idx, data_folder, results_folder, goal = False, perturbation = "adaptative", custom_exp_name=None, model_custom_exp_name=None):
+    def __init__(self,nb_iter, idx, data_folder, results_folder, goal = False, model_folder=None):
         self.nb_iter = nb_iter
         self.idx = idx
         self.data_folder = data_folder
         self.results_folder = results_folder
         self.goal = goal
-        self.perturbation = perturbation
-        self.custom_exp_name = custom_exp_name if custom_exp_name is not None else ''
-        self.model_custom_exp_name = model_custom_exp_name if model_custom_exp_name is not None else ''
+        self.model_folder = model_folder if model_folder is not None else ''
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.params_model = {
-            'model_path': self.results_folder + f'trained_model{self.model_custom_exp_name}.pth',
+            'model_path': self.model_folder + f'trained_model.pth',
             'device': self.device
         }
-        self.params_to_predict = ['mutation_rate', 
-                    'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG', 
-                    'transition_matrix_TA', 'transition_matrix_TC', 'transition_matrix_TG',
-                    'transition_matrix_CA', 'transition_matrix_CT', 'transition_matrix_CG', 
-                        'transition_matrix_GA', 'transition_matrix_GT', 'transition_matrix_GC']
+        self.params_to_predict = [
+                'mutation_rate', 
+                'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG',
+                'transition_matrix_TA', 'transition_matrix_TC', 'transition_matrix_TG',
+                'transition_matrix_CA', 'transition_matrix_CT', 'transition_matrix_CG',
+                'transition_matrix_GA', 'transition_matrix_GT', 'transition_matrix_GC'
+            ] if 'null_diag' in model_folder else ['mutation_rate', 
+                                           'transition_matrix_AA', 'transition_matrix_AT', 'transition_matrix_AC', 'transition_matrix_AG',
+                                            'transition_matrix_TA', 'transition_matrix_TT', 'transition_matrix_TC', 'transition_matrix_TG',
+                                            'transition_matrix_CA', 'transition_matrix_CT', 'transition_matrix_CC', 'transition_matrix_CG',
+                                            'transition_matrix_GA', 'transition_matrix_GT', 'transition_matrix_GC', 'transition_matrix_GG'
+            ]
         
     #Model to use to generate summary-statistics
     def model(self):
@@ -273,14 +278,21 @@ class GenerateSummaryStatistics:
         #Load model and data
         model_to_test = self.model()
         if self.goal and "real" in self.data_folder:
-            dataset = torch.load(self.data_folder+f"test_dataset_mtDNA_L4.pt", weights_only=False)
+            if "full_seq_null_diag" in self.data_folder:
+                dataset = torch.load('mtDNA/full_seq_null_diag_real_data/test_dataset_mtDNA_L4.pt', weights_only=False)
+            elif "full_seq" in self.data_folder:
+                dataset = torch.load('mtDNA/full_seq_real_data/test_dataset_mtDNA_L4.pt', weights_only=False)
+            elif "null_diag" in self.data_folder:
+                dataset = torch.load('mtDNA/null_diag_real_data/test_dataset_mtDNA_L4.pt', weights_only=False)
+            else:
+                dataset = torch.load('mtDNA/real_data/test_dataset_mtDNA_L4.pt', weights_only=False)
         elif self.goal:
-            dataset = torch.load(self.data_folder+f"dataset_{self.idx}_prior_{self.nb_iter}_goals{self.custom_exp_name}{self.model_custom_exp_name}.pt", weights_only=False)
+            dataset = torch.load(self.data_folder+f"dataset_{self.idx}_prior_{self.nb_iter}_goals.pt", weights_only=False)
         else:
-            dataset = torch.load(self.data_folder+f"dataset_{self.idx}_prior_{self.nb_iter}_{self.perturbation}{self.custom_exp_name}{self.model_custom_exp_name}.pt", weights_only=False)
+            dataset = torch.load(self.data_folder+f"dataset_{self.idx}_prior_{self.nb_iter}.pt", weights_only=False)
         #Normalize data
-        y_train_mean = torch.load(self.data_folder+f'y_train_mean{self.model_custom_exp_name}.pt', weights_only=False)
-        y_train_std = torch.load(self.data_folder+f'y_train_std{self.model_custom_exp_name}.pt', weights_only=False)
+        y_train_mean = torch.load(self.model_folder+f'y_train_mean.pt', weights_only=False)
+        y_train_std = torch.load(self.model_folder+f'y_train_std.pt', weights_only=False)
         y = dataset[:][1]
         y_norm = (y - y_train_mean)/y_train_std
         dataset2 = TensorDataset(dataset[:][0], y_norm)
@@ -289,9 +301,9 @@ class GenerateSummaryStatistics:
         summary_statistics = eval(model_to_test, self.device, dataset2, self.params_to_predict)
         norm_summary_statistics = summary_statistics*y_train_std.to('cpu').repeat(1,2).numpy()+y_train_mean.to('cpu').repeat(1,2).numpy()
         if self.goal:
-            torch.save(norm_summary_statistics,self.results_folder+f'parameters_and_SS_{self.idx}_prior_{self.nb_iter}_goals{self.custom_exp_name}{self.model_custom_exp_name}.pt')
+            torch.save(norm_summary_statistics,self.results_folder+f'parameters_and_SS_{self.idx}_prior_{self.nb_iter}_goals.pt')
         else:
-            torch.save(norm_summary_statistics,self.results_folder+f'parameters_and_SS_{self.idx}_prior_{self.nb_iter}_{self.perturbation}{self.custom_exp_name}{self.model_custom_exp_name}.pt')
+            torch.save(norm_summary_statistics,self.results_folder+f'parameters_and_SS_{self.idx}_prior_{self.nb_iter}.pt')
         print('mse : ',mse(norm_summary_statistics))
 
 def mse(predictions):
