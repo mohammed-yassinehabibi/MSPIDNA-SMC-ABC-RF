@@ -19,7 +19,7 @@ pip install -r requirements.txt
 ```
 ## How to test the inference method quickly
 
-In  the [results_analysis](results_analysis.ipynb) notebook, we give a function that can be used to run new inference experiments with already trained MSPIDNA networks. We also give an implementation of an idea developed in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf) to assess the efficiency of the implemented method as well as functions to plot the results of the inference (AD & 2D posteriors). We also provide an implementation of SMC-ABC-RF functions.
+In  the [results_analysis](results_analysis.ipynb) notebook, we give a function that can be used to run new inference experiments with already trained MSPIDNA networks. We also give an implementation of an idea developed in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf) to assess the efficiency of the implemented method as well as functions to plot the results of the inference (AD & 2D posteriors). 
 
 ## Overall presentation of the repository
 This repository gives an implementation of a process made to infer parameters of a stochastic finite sites model whose output data are DNA sequences sampled in a population with a known common ancestor. The process is motivated and explained in [Deep Learning and Approximate Bayesian Computation for Finite sites model multivariate inference](Deep_Learning_and_Approximate_Bayesian_Computation_for_Finite_sites_model_multivariate_inference.pdf).
